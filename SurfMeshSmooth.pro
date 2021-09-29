@@ -79,14 +79,12 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 INCLUDEPATH += $$PWD/'../../lib/eigen3' \
-		   $$PWD/'../../lib/Boost/include/boost-1_68' \
-		   $$PWD/'../../lib/OpenNI2/Include' \
-		   $$PWD/'../../lib/FLANN/include' \
+#		   $$PWD/'CUDAMeshSmooth/include' \
 		   $$PWD/'dialogs' \
 		   $$PWD/'utils'
 
-LIBS += -L$$PWD/'../../lib/Boost/lib/'
-LIBS += -L$$PWD/'../../lib/OpenNI2/Lib/' -lOpenNI2
+#LIBS += -L$$PWD/CUDAMeshSmooth/lib/ -lCUDAMeshSmooth
+LIBS   += -lopengl32
 
 RESOURCES += \
 	SurfMeshSmooth.qrc
@@ -101,3 +99,4 @@ gcc{
     QMAKE_LFLAGS += -fopenmp
     LIBS += -fopenmp
 }
+

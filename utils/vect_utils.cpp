@@ -42,7 +42,7 @@ Vector3f point_project_triangle(
 
 	degenerate = (lengthsq[imin] < 1e-15*lengthsq[imax]);
 
-	if( !degenerate ) {
+	if ( !degenerate ) {
 		q = point_project_triangle_nondegen(p, a, b, c, hovering, bary);
 	}
 	else {

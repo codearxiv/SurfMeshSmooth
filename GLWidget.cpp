@@ -11,12 +11,14 @@
 #include <Eigen/Core>
 #include <QMouseEvent>
 #include <QOpenGLShaderProgram>
+#include <QOpenGLFunctions>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QThread>
 #include <QRecursiveMutex>
 #include <math.h>
 
+#define SHOW_MESH
 #define SHOW_MESH_DBUG
 
 
@@ -220,7 +222,7 @@ static const char *fragmentShaderSourceWireframe =
 		"   vec3 lightPos;\n"
 		"   vec3 vertColor;\n"
 		"};\n"
-		"noperspective varying vec3 dist;\n"
+		"noperspective in vec3 dist;\n"
 		"void main() {\n"
 		"   float mediump nearD = min(min(dist[0],dist[1]),dist[2]);\n"
 		"   float mediump t = exp2(-5.0*nearD*nearD);\n"
@@ -327,7 +329,6 @@ void GLWidget::initializeGL()
 
 	setGLView();
 
-
 	m_shaderWireframe->release();
 
 }
@@ -339,6 +340,10 @@ void GLWidget::paintGL()
 	glEnable(GL_DEPTH_TEST);
 //	glEnable(GL_CULL_FACE);
 //	glEnable(GL_PROGRAM_POINT_SIZE);
+//#ifdef SHOW_MESH_DBUG
+//	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+//	glLineWidth(10.0f);
+//#endif
 
 	size_t nverts = m_mesh.vertCount();
 	size_t ntris = m_mesh.triCount();
@@ -370,14 +375,16 @@ void GLWidget::paintGL()
 				GL_UNIFORM_BUFFER, m_colorLoc, m_colorSiz,
 				(void*)(meshColor));
 
+#ifdef SHOW_MESH
 	m_shaderWireframe->bind();
 	QOpenGLVertexArrayObject::Binder vaoBinder(&m_meshVao);
 //	glDrawArrays(GL_POINTS, 0, nverts);
 //	glDrawArrays(GL_TRIANGLES, 0, nverts);
 	glDrawElements(GL_TRIANGLES, 3*ntris, GL_UNSIGNED_INT, 0);
 	m_shaderWireframe->release();
+#endif
 
-	if( m_showMeshNorms ){
+	if ( m_showMeshNorms ){
 		m_shader->bind();
 		float normColor[3] = {1.0f, 0.0f, 1.0f};
 		glBufferSubData(
@@ -389,6 +396,7 @@ void GLWidget::paintGL()
 	}
 
 #ifdef SHOW_MESH_DBUG
+	glDisable(GL_DEPTH_TEST);
 	m_shader->bind();
 	float debugColor[3] = {1.0f, 0.5f, 1.0f};
 	glBufferSubData(
@@ -397,6 +405,7 @@ void GLWidget::paintGL()
 	QOpenGLVertexArrayObject::Binder vaoBinder4(&m_meshDebugVao);
 	glDrawArrays(GL_LINES, 0, 2*m_mesh.debugCount());
 	m_shader->release();
+	glEnable(GL_DEPTH_TEST);
 #endif
 
 }
@@ -517,7 +526,7 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
 {
 	m_lastMousePos = event->pos();
 	//***
-//	if(event->buttons() & Qt::MidButton){
+//	if (event->buttons() & Qt::MidButton){
 //		setRandomMesh(35000);
 //	}
 
@@ -628,7 +637,7 @@ void GLWidget::updateMesh(int opt)
 	QMutexLocker locker(&m_recMutex);
 
 	setGLMesh();
-	if( m_showMeshNorms ) setGLMeshNorms(1e-2*m_modelSize);
+	if ( m_showMeshNorms ) setGLMeshNorms(1e-2*m_modelSize);
 
 #ifdef SHOW_MESH_DBUG
 	setGLMeshDebug();

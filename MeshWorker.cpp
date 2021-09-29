@@ -30,7 +30,7 @@ void MeshWorker::generateMesh(
 
 void MeshWorker::approxMeshNorms()
 {
-	if(m_mesh->vertCount() == 0) return;
+	if (m_mesh->vertCount() == 0) return;
 	m_mesh->approxMeshNorms();
 	emit finished();
 
@@ -39,7 +39,7 @@ void MeshWorker::approxMeshNorms()
 //-------------------------------------------------------------------------
 void MeshWorker::noiseMesh(int nSweeps)
 {
-	if(m_mesh->vertCount() == 0) return;
+	if (m_mesh->vertCount() == 0) return;
 	m_mesh->noiseMesh(nSweeps);
 
 	emit finished();
@@ -48,7 +48,7 @@ void MeshWorker::noiseMesh(int nSweeps)
 //-------------------------------------------------------------------------
 void MeshWorker::smoothMesh(int nSweeps)
 {
-	if(m_mesh->vertCount() == 0) return;
+	if (m_mesh->vertCount() == 0) return;
 	m_mesh->smoothMesh(nSweeps);
 
 	emit finished();

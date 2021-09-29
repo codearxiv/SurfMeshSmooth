@@ -13,6 +13,7 @@
 #include "timer.h"
 #include "selection_sort.h"
 #include "vect_utils.h"
+//#include "test.hpp"
 
 #include <Eigen/Core>
 #include <qopengl.h>
@@ -97,7 +98,7 @@ const GLfloat* Mesh::vertGLData()
 {
 	m_vertGL.resize(6 * m_verts.size());
 
-	for(Index i=0, j=0; i < m_verts.size(); ++i){
+	for (Index i=0, j=0; i < m_verts.size(); ++i){
 		m_vertGL[j] = m_verts[i][0];
 		m_vertGL[j+1] = m_verts[i][1];
 		m_vertGL[j+2] = m_verts[i][2];
@@ -118,7 +119,7 @@ const GLuint* Mesh::triGLData()
 {
 	m_triGL.resize(3 * m_tris.size());
 
-	for(Index i=0, j=0; i < m_tris.size(); ++i){
+	for (Index i=0, j=0; i < m_tris.size(); ++i){
 		m_triGL[j] = m_tris[i][0];
 		m_triGL[j+1] = m_tris[i][1];
 		m_triGL[j+2] = m_tris[i][2];
@@ -134,7 +135,7 @@ const GLfloat* Mesh::normGLData(float scale)
 {
 	m_normGL.resize(12 * m_verts.size());
 
-	for(Index i=0, j=0; i < m_verts.size(); ++i){
+	for (Index i=0, j=0; i < m_verts.size(); ++i){
 		m_normGL[j] = m_verts[i][0] - scale*m_norms[i][0];
 		m_normGL[j+1] = m_verts[i][1] - scale*m_norms[i][1];
 		m_normGL[j+2] = m_verts[i][2] - scale*m_norms[i][2];
@@ -161,7 +162,7 @@ const GLfloat* Mesh::debugGLData()
 
 	m_debugGL.resize(12 * m_debug.size());
 
-	for(Index i=0, j=0; i < m_debug.size(); ++i){
+	for (Index i=0, j=0; i < m_debug.size(); ++i){
 		Vector3f p = m_debug[i].first;
 		Vector3f q = m_debug[i].second;
 		m_debugGL[j] = p(0);
@@ -234,13 +235,13 @@ void Mesh::fromPlaneHeight(
 	Vector3f u, v;
 	plane.getUVAxes(u,v);
 
-	for(Index i = 0; i < ndim; ++i){
+	for (Index i = 0; i < ndim; ++i){
 		double ustep = i*step - 1.5;
 		Vector3f qu = ustep*u;
-		for(Index j = 0; j < ndim; ++j){
+		for (Index j = 0; j < ndim; ++j){
 			double vstep = j*step - 1.5;
 			Vector3f q = qu + vstep*v;
-			if( heightFun != nullptr ){
+			if ( heightFun != nullptr ){
 				float normScale = heightFun(ustep, vstep);
 				q = q + normScale*norm;
 			}
@@ -248,14 +249,14 @@ void Mesh::fromPlaneHeight(
 		}
 	}
 
-	if(m_msgLogger != nullptr) {
+	if (m_msgLogger != nullptr) {
 		m_msgLogger->logMessage(QString::number(vertCount()) + " vertices created.");
 	}
 
-	for(Index i = 0; i < ndim-1; ++i){
+	for (Index i = 0; i < ndim-1; ++i){
 		Vector3i iv, iw;
 		Index k = i*ndim;
-		for(Index j = 0; j < ndim-1; ++j){
+		for (Index j = 0; j < ndim-1; ++j){
 			int l = k+j;
 			iv(0) = l;
 			iv(1) = l+1;
@@ -268,34 +269,26 @@ void Mesh::fromPlaneHeight(
 		}
 	}
 
-	if(m_msgLogger != nullptr) {
+	if (m_msgLogger != nullptr) {
 		m_msgLogger->logMessage(QString::number(triCount()) + " triangles created.");
 	}
 
-//	buildTriAdjacency();//***
-//	noiseMesh(50);//***
-//	buildVertAdjacency();//***
-	approxMeshNorms();
+	buildTriAdjacency();
+//	buildVertAdjacency();
 	buildVertToTriMap();
+	approxMeshNorms();
 
-//	localizeVertIndices(128); //***
-//	for (int i=0; i<10; ++i) { //***
-//		Index itriEnd, ivertEnd;
-//		Vector3f baryEnd;
-//		Vector3f point = Vector3f::Random();
-//		edgeWalkTo(point, rand() % m_verts.size(),
-//				   ivertEnd);
-//		triWalkTo(point, rand() % m_tris.size(),
-//				  itriEnd, baryEnd);
-//		meshWalkTo(point, rand() % m_verts.size(),
-//				   itriEnd, baryEnd);
-//	}
+//	localizeVertIndices(128);
+
+//	int number;
+//	testfunction(number);
+//	m_msgLogger->logMessage("number: " + QString::number(int(number)));
 }
 //---------------------------------------------------------
 
 //void Mesh::testNearestTri()
 //{
-//	for(int j=0; j<100; ++j){
+//	for (int j=0; j<100; ++j){
 //		Vector3f x = Vector3f::Random();
 
 //		Index ntris = m_tris.size();
@@ -304,7 +297,7 @@ void Mesh::fromPlaneHeight(
 //		double dmin = float_infinity;
 //		bool hovering, degenerate;
 
-//		for(Index itri=0; itri<ntris; ++itri) {
+//		for (Index itri=0; itri<ntris; ++itri) {
 //			Vector3f va = m_verts[ m_tris[itri][0] ];
 //			Vector3f vb = m_verts[ m_tris[itri][1] ];
 //			Vector3f vc = m_verts[ m_tris[itri][2] ];
@@ -338,47 +331,119 @@ void Mesh::approxMeshNorms()
 	Index nverts = m_verts.size();
 	Index ntris = m_tris.size();
 
-	m_norms.assign(nverts, Vector3f(0.0f,0.0f,0.0f));
-
-//	std::clock_t c_start = std::clock();//!***
-	const bool useOpenMP = false;
-
 //	size_t threshold = 0, lastPos = 0, progress = 0;
+	std::clock_t c_start, c_end;//!***
+	timer(0, c_start, c_end);
 
-	for(Index i=0; i < ntris; ++i) {
-		Index a = m_tris[i][0];
-		Index b = m_tris[i][1];
-		Index c = m_tris[i][2];
-		Vector3f vab = (m_verts[b] - m_verts[a]);
-		Vector3f vac = (m_verts[c] - m_verts[a]);
-		Vector3f vbc = (m_verts[c] - m_verts[b]);
-		Vector3f vx = vab.cross(vac);
-		float x = vx.norm();
-		if( x <= float_tiny ) continue;
-		float ab = vab.norm();
-		float ac = vac.norm();
-		float bc = vbc.norm();
-		float wa = 1.0f - vab.dot(vac)/(ab*ac);
-		float wb = 1.0f + vab.dot(vbc)/(ab*bc); //reflect vab
-		float wc = 1.0f - vac.dot(vbc)/(ac*bc);
-		m_norms[a] += wa*vx;
-		m_norms[b] += wb*vx;
-		m_norms[c] += wc*vx;
-//		// Log progress
-//		if(m_msgLogger != nullptr) {
-//			++progress;
-//			m_msgLogger->logProgress(
-//						"Building vertex normals",
-//						progress, ntris, 1, threshold, lastPos);
-//		}
+	const bool useOpenMP = true;
+	bool vertwiseNotTriwise = true;//(m_vertTri.size() > 0) && (m_triadj.size() > 0);
+
+	if ( vertwiseNotTriwise ) {
+		// No thread contention if we can compute normals per-vertex
+		// instead of per-triangle and average.
+#pragma omp parallel if (useOpenMP) default(shared)
+{
+		auto triVertSide = [](Vector3i *triVerts, Index ivert) -> int {
+			int iside;
+			for(iside=0; iside<=2; ++iside) {
+				if ((*triVerts)[iside] == ivert) break;
+			}
+			return iside;
+		};
+
+#pragma omp for schedule(static)
+		for (Index ivert=0; ivert < nverts; ++ivert) {
+			Index itri0 = m_vertTri[ivert];
+			int iside0 = triVertSide(&m_tris[itri0], ivert);
+			Index itrib0 = m_triadj[itri0][iside0!=2 ? iside0+1 : 0];
+			Index itric0 = m_triadj[itri0][iside0!=0 ? iside0-1 : 2];
+			Vector3f normAvg(0.0f,0.0f,0.0f);
+			Vector3f dvert = m_verts[ivert];
+			// Walk around ivert computing and averaging adjacent
+			// triangle normals as we go.
+			for (int idir=0; idir <= 1; ++idir) {
+				Index itriPrev = (idir == 0 ? itrib0 : itri0);
+				Index itri = (idir == 0 ? itri0 : itric0);
+
+				while (itri >= 0) {
+					Vector3i *triVerts = &m_tris[itri];
+					int iside = triVertSide(triVerts, ivert);
+					int isideb = (iside != 2 ? iside+1 : 0);
+					int isidec = (iside != 0 ? iside-1 : 2);
+					Index b = (*triVerts)[isideb];
+					Index c = (*triVerts)[isidec];
+					Vector3f vab = (m_verts[b] - dvert);
+					Vector3f vac = (m_verts[c] - dvert);
+					Vector3f vx = vab.cross(vac);
+					float x = vx.dot(vx);
+					if ( x <= float_tiny ) continue;
+					float ab = vab.dot(vab);
+					float ac = vac.dot(vac);
+					float wa = 1.0f - vab.dot(vac)/sqrt(ab*ac);
+					normAvg += wa*vx;  // weighted average by triangle shape
+
+					Index itrib = m_triadj[itri][iside];
+					Index itric = m_triadj[itri][isidec];
+					Index itriNext = (itrib != itriPrev ? itrib : itric);
+					itriPrev = itri;
+					itri = itriNext;
+					if ( itri == itri0 ) break;
+				}
+				// Done if we went all the way around ivert.
+				// Else hit the boundary, go opposite direction.
+				if ( itri == itri0 ) break;
+			}
+			m_norms[ivert] = normAvg.normalized();
+		}
+} //Parallel
+
+	}
+	else {
+		m_norms.assign(nverts, Vector3f(0.0f,0.0f,0.0f));
+
+		for (Index itri=0; itri < ntris; ++itri) {
+			Vector3i *triVerts = &m_tris[itri];
+			Index a = (*triVerts)[0];
+			Index b = (*triVerts)[1];
+			Index c = (*triVerts)[2];
+			Vector3f vab = (m_verts[b] - m_verts[a]);
+			Vector3f vac = (m_verts[c] - m_verts[a]);
+			Vector3f vbc = (m_verts[c] - m_verts[b]);
+			Vector3f vx = vab.cross(vac);
+			float x = vx.dot(vx);
+			if ( x <= float_tiny ) continue;
+			float ab = vab.dot(vab);
+			float ac = vac.dot(vac);
+			float bc = vbc.dot(vbc);
+			float wa = 1.0f - vab.dot(vac)/sqrt(ab*ac);
+			float wb = 1.0f + vab.dot(vbc)/sqrt(ab*bc); //reflect vab
+			float wc = 1.0f - vac.dot(vbc)/sqrt(ac*bc);
+			m_norms[a] += wa*vx;
+			m_norms[b] += wb*vx;
+			m_norms[c] += wc*vx;
+			//// Log progress
+			//if (m_msgLogger != nullptr) {
+			//	++progress;
+			//	m_msgLogger->logProgress(
+			//				"Building vertex normals",
+			//				progress, ntris, 1, threshold, lastPos);
+			//}
+
+		}
+
+#pragma omp parallel if (useOpenMP) default(shared)
+{
+#pragma omp for schedule(static)
+		for (Index ivert=0; ivert < nverts; ++ivert) {
+			m_norms[ivert].normalize();
+		}
+} //Parallel
 
 	}
 
-//	threshold = 0, lastPos = 0, progress = 0;
 
-	for(Index i=0; i < nverts; ++i) {
-		m_norms[i].normalize();
-	}
+	timer(1, c_start, c_end);
+
 
 //	m_msgLogger->logMessage("Building vertex normals: 100%...", 0);
 	m_msgLogger->logMessage("Done!",1);
@@ -410,8 +475,8 @@ void Mesh::approxMeshNorms()
 //	std::unordered_map<TriEdge, TriAdj, PairHash> edgeadj;
 //	//edgeadj.max_load_factor(1.0f);
 
-//	for(Index itri=0; itri < ntris; ++itri) {
-//		for(int i=0; i <= 2; ++i) {
+//	for (Index itri=0; itri < ntris; ++itri) {
+//		for (int i=0; i <= 2; ++i) {
 //			int j = (i == 2 ? 0 : i+1);
 //			Index a = m_tris[itri][i];
 //			Index b = m_tris[itri][j];
@@ -436,7 +501,7 @@ void Mesh::approxMeshNorms()
 //	// fill in the adjacency array over each triangle
 //	m_triadj.assign(ntris, Vector3i(-1,-1,-1));
 
-//	for( const auto& key : edgeadj ) {
+//	for ( const auto& key : edgeadj ) {
 //		TriAdj adj = key.second;
 //		int ia = adj.first.second;
 //		int ib = adj.second.second;
@@ -464,8 +529,8 @@ void Mesh::approxMeshNorms()
 //	m_boundVert.assign(nverts, false);
 
 //	// flag boundary vertices
-//	for(Index itri=0; itri < ntris; ++itri) {
-//		for(int i=0; i <= 2; ++i) {
+//	for (Index itri=0; itri < ntris; ++itri) {
+//		for (int i=0; i <= 2; ++i) {
 //			if ( m_triadj[itri][i] > -1 ) continue;
 //			int j = (i == 2 ? 0 : i+1);
 //			Index a = m_tris[itri][i];
@@ -508,10 +573,11 @@ void Mesh::buildTriAdjacency()
 	// This is the size of each bin to store them.
 	vector<Index> binSizes(nverts, 0);
 
-	for(Index itri=0; itri < ntris; ++itri) {
-		Index a = m_tris[itri][0];
-		Index b = m_tris[itri][1];
-		Index c = m_tris[itri][2];
+	for (Index itri=0; itri < ntris; ++itri) {
+		Vector3i *triVerts = &m_tris[itri];
+		Index a = (*triVerts)[0];
+		Index b = (*triVerts)[1];
+		Index c = (*triVerts)[2];
 		binSizes[a]+=2;
 		binSizes[b]+=2;
 		binSizes[c]+=2;
@@ -522,7 +588,7 @@ void Mesh::buildTriAdjacency()
 	Index sizeAccum = 0;
 	Index sizeMax = 0;
 
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		binOffsets[ivert] = sizeAccum;
 		sizeAccum += binSizes[ivert];
 		sizeMax = max(sizeMax, binSizes[ivert]);
@@ -533,8 +599,8 @@ void Mesh::buildTriAdjacency()
 	vector<Index> binCounts(nverts, 0);
 	vector<TriVert> bins(sizeAccum);
 
-	for(Index itri=0; itri < ntris; ++itri) {
-		for(int i=0; i <= 2; ++i) {
+	for (Index itri=0; itri < ntris; ++itri) {
+		for (int i=0; i <= 2; ++i) {
 			int j = (i == 2 ? 0 : i+1);
 			Index a = m_tris[itri][i];
 			Index b = m_tris[itri][j];
@@ -554,17 +620,20 @@ void Mesh::buildTriAdjacency()
 	m_triadj.assign(ntris, Vector3i(-1,-1,-1));
 	vector<TriVert> sorted(sizeMax);
 
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		Index offset = binOffsets[ivert];
 		Index size = binSizes[ivert];
+		// Sort bin to find duplicates
 		if ( size < 100 ) {
+			// Quicker to do O(n^2) selection sort for small arrays,
+			// also no temporary array allocation under the hood.
 			selection_sort<TriVert>(bins, sorted, offset, offset+size-1, compare);
 		}
 		else{
 			sorted.assign(bins.begin()+offset, bins.begin()+offset+size);
 			std::sort(sorted.begin(), sorted.end(), compare);
 		}
-		for(Index i=1; i < size; ++i) {
+		for (Index i=1; i < size; ++i) {
 			TriVert v = sorted[i-1];
 			TriVert w = sorted[i];			
 			if ( get<0>(v) == get<0>(w) ) {
@@ -574,7 +643,10 @@ void Mesh::buildTriAdjacency()
 				uint sidew = get<2>(w);
 				m_triadj[triv][sidev] = triw;
 				m_triadj[triw][sidew] = triv;
-////debug
+//debug
+//				m_debug.push_back(pair<Vector3f,Vector3f>(
+//							m_verts[m_tris[triv][sidev]],
+//							m_verts[m_tris[triw][sidew]]));
 //				Vector3f centa =
 //						m_verts[m_tris[triv][0]] +
 //						m_verts[m_tris[triv][1]] +
@@ -595,8 +667,8 @@ void Mesh::buildTriAdjacency()
 	if ( m_boundVert.size() == 0 ) {
 		// flag boundary vertices
 		m_boundVert.assign(nverts, false);
-		for(Index itri=0; itri < ntris; ++itri) {
-			for(int i=0; i <= 2; ++i) {
+		for (Index itri=0; itri < ntris; ++itri) {
+			for (int i=0; i <= 2; ++i) {
 				if ( m_triadj[itri][i] > -1 ) continue;
 				int j = (i == 2 ? 0 : i+1);
 				Index a = m_tris[itri][i];
@@ -604,11 +676,11 @@ void Mesh::buildTriAdjacency()
 				m_boundVert[a] = true;
 				m_boundVert[b] = true;
 				////debug
-				//			Vector3f u = Vector3f(1e-2,1e-2,1e-2);
-				//			m_debug.push_back(pair<Vector3f,Vector3f>(
-				//								  m_verts[a], m_verts[a]+u));
-				//			m_debug.push_back(pair<Vector3f,Vector3f>(
-				//								  m_verts[b], m_verts[b]+u));
+				//Vector3f u = Vector3f(1e-2,1e-2,1e-2);
+				//m_debug.push_back(pair<Vector3f,Vector3f>(
+				//					  m_verts[a], m_verts[a]+u));
+				//m_debug.push_back(pair<Vector3f,Vector3f>(
+				//					  m_verts[b], m_verts[b]+u));
 
 			}
 		}
@@ -641,10 +713,11 @@ void Mesh::buildVertAdjacency()
 	// This is the size of each bin to store them.
 	vector<Index> binSizes(nverts, 0);
 
-	for(Index itri=0; itri < ntris; ++itri) {
-		Index a = m_tris[itri][0];
-		Index b = m_tris[itri][1];
-		Index c = m_tris[itri][2];
+	for (Index itri=0; itri < ntris; ++itri) {
+		Vector3i *triVerts = &m_tris[itri];
+		Index a = (*triVerts)[0];
+		Index b = (*triVerts)[1];
+		Index c = (*triVerts)[2];
 		binSizes[a] += 2;
 		binSizes[b] += 2;
 		binSizes[c] += 2;
@@ -655,7 +728,7 @@ void Mesh::buildVertAdjacency()
 	Index sizeAccum = 0;
 	Index sizeMax = 0;
 
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		binOffsets[ivert] = sizeAccum;
 		sizeAccum += binSizes[ivert];
 		sizeMax = max(sizeMax, binSizes[ivert]);
@@ -665,8 +738,8 @@ void Mesh::buildVertAdjacency()
 	vector<Index> binCounts(nverts, 0);
 	vector<Index> bins(sizeAccum);
 
-	for(Index itri=0; itri < ntris; ++itri) {
-		for(int i=0; i <= 2; ++i) {
+	for (Index itri=0; itri < ntris; ++itri) {
+		for (int i=0; i <= 2; ++i) {
 			int j = (i == 2 ? 0 : i+1);
 			Index a = m_tris[itri][i];
 			Index b = m_tris[itri][j];
@@ -688,10 +761,13 @@ void Mesh::buildVertAdjacency()
 	m_boundVert.assign(nverts, false);
 	m_vertadjMax = 0;
 
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		Index offset = binOffsets[ivert];
 		Index size = binSizes[ivert];
+		// Sort bin to find duplicates
 		if ( size < 100 ) {
+			// Quicker to do O(n^2) selection sort for small arrays,
+			// also no temporary array allocation under the hood.
 			selection_sort<Index>(bins, sorted, offset, offset+size-1, compare);
 		}
 		else {
@@ -703,14 +779,14 @@ void Mesh::buildVertAdjacency()
 		m_vertadj.push_back(aprev);
 		Index nrepeat = 0;
 		bool boundVert = false;
-		for(Index i=1; i < size; ++i) {
+		for (Index i=1; i < size; ++i) {
 			Index a = sorted[i];
-			if( aprev == a ) {
+			if ( aprev == a ) {
 				++nrepeat;
 			}
 			else {
 				m_vertadj.push_back(a);
-				if( nrepeat == 0 ) boundVert = true;
+				if ( nrepeat == 0 ) boundVert = true;
 				nrepeat = 0;
 ////debug
 //				m_debug.push_back(pair<Vector3f,Vector3f>(
@@ -721,7 +797,7 @@ void Mesh::buildVertAdjacency()
 		m_vertadjCounts[ivert] = m_vertadj.size() - m_vertadjOffsets[ivert];
 		m_vertadjMax = max(m_vertadjMax, m_vertadjCounts[ivert]);
 
-		if( boundVert ) {
+		if ( boundVert ) {
 			m_boundVert[ivert] = true;
 ////debug
 //			Vector3f u = Vector3f(1e-2,1e-2,1e-2);
@@ -749,8 +825,8 @@ void Mesh::buildVertToTriMap()
 
 	m_vertTri.resize(nverts);
 
-	for(Index itri=0; itri < ntris; ++itri){
-		for(int i=0; i<3; ++i){
+	for (Index itri=0; itri < ntris; ++itri){
+		for (int i=0; i<3; ++i){
 			Index ivert = m_tris[itri][i];
 			m_vertTri[ivert] = itri;
 		}
@@ -781,7 +857,7 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 	vector<Index> patch;
 	patch.reserve(maxPatchSize);
 
-	for(Index ivertStart=0; ivertStart < nverts; ++ivertStart) {
+	for (Index ivertStart=0; ivertStart < nverts; ++ivertStart) {
 		if ( map[ivertStart] >= 0 ) continue;
 		map[ivertStart] = nvertsMapped;
 		++nvertsMapped;
@@ -798,7 +874,7 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 			Index ivert = patch[patchIdx];
 			Index offset = m_vertadjOffsets[ivert];
 			Index size = m_vertadjCounts[ivert];
-			for(Index i=0; i < size; ++i) {
+			for (Index i=0; i < size; ++i) {
 				if ( npatch > maxPatchSize ) break;
 				Index ivertadj = m_vertadj[offset+i];
 				if ( map[ivertadj] >= 0 ) continue;
@@ -818,14 +894,14 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 
 	// Get inverse map
 	vector<Index> mapinv(nverts);
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		mapinv[map[ivert]] = ivert;
 	}
 
 
 	// Remap vertex coordinates
 	vector<Vector3f> m_vertsOld = m_verts;
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		m_verts[ivert] = m_vertsOld[mapinv[ivert]];
 	}
 	m_vertsOld.clear();
@@ -833,7 +909,7 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 
 	// Remap vertex normals
 	vector<Vector3f> m_normsOld = m_norms;
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		m_norms[ivert] = m_normsOld[mapinv[ivert]];
 	}
 	m_normsOld.clear();
@@ -843,7 +919,7 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 	// Remap vertex -> containing triangle pointers
 	if ( m_vertTri.size() > 0 ) {
 		vector<Index> m_vertTriOld = m_vertTri;
-		for(Index ivert=0; ivert < nverts; ++ivert) {
+		for (Index ivert=0; ivert < nverts; ++ivert) {
 			m_vertTri[ivert] = m_vertTriOld[mapinv[ivert]];
 		}
 //		m_vertTriOld.clear();
@@ -851,8 +927,8 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 	}
 
 	// Remap triangle vertex indices
-	for(Index itri=0; itri < ntris; ++itri){
-		for(int i=0; i<3; ++i){
+	for (Index itri=0; itri < ntris; ++itri){
+		for (int i=0; i<3; ++i){
 			Index ivert = m_tris[itri][i];
 			m_tris[itri][i] = map[ivert];
 		}
@@ -861,7 +937,7 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 	// Remap boundary vertex flags
 	if ( m_boundVert.size() > 0 ) {
 		vector<bool> m_boundVertOld = m_boundVert;
-		for(Index ivert=0; ivert < nverts; ++ivert) {
+		for (Index ivert=0; ivert < nverts; ++ivert) {
 			m_boundVert[ivert] = m_boundVertOld[mapinv[ivert]];
 		}
 		m_boundVertOld.clear();
@@ -873,10 +949,10 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 	vector<Index> m_vertadjOffsetsOld = m_vertadjOffsets;
 	vector<Index> m_vertadjCountsOld = m_vertadjCounts;
 	Index offset = 0;
-	for(Index ivert=0; ivert < nverts; ++ivert) {
+	for (Index ivert=0; ivert < nverts; ++ivert) {
 		Index offsetOld = m_vertadjOffsetsOld[mapinv[ivert]];
 		Index size = m_vertadjCountsOld[mapinv[ivert]];
-		for(Index i=0; i < size; ++i) {
+		for (Index i=0; i < size; ++i) {
 			Index ivertadj = m_vertadjOld[offsetOld+i];
 			m_vertadj[offset+i] = map[ivertadj];
 		}
@@ -904,17 +980,17 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //	if ( m_boundVert.size() == 0 ) buildTriangleAdjacency();
 
 //	vector<Index> tris(ntris);
-//	for(Index i=0; i < ntris; ++i){ tris[i] = i; }
+//	for (Index i=0; i < ntris; ++i){ tris[i] = i; }
 //	vector<Index> sides(3);
-//	for(Index i=0; i < 3; ++i){ sides[i] = i; }
+//	for (Index i=0; i < 3; ++i){ sides[i] = i; }
 
-//	for(int isweep=1; isweep <= nSweeps; ++isweep){
+//	for (int isweep=1; isweep <= nSweeps; ++isweep){
 //		std::random_shuffle(tris.begin(), tris.end());
 
-//		for(Index i=0; i < ntris; ++i) {
+//		for (Index i=0; i < ntris; ++i) {
 //			Index itri = tris[i];
 //			std::random_shuffle(sides.begin(), sides.end());
-//			for(Index j=0; j < 3; ++j) {
+//			for (Index j=0; j < 3; ++j) {
 //				Index a = m_tris[itri][sides[j]];
 //				Index b = m_tris[itri][sides[j != 2 ? j+1 : 0]];
 //				Index c = m_tris[itri][sides[j != 0 ? j-1 : 2]];
@@ -964,16 +1040,16 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //	vector<Vector3f> newNorms(nverts, zeros);
 //	vector<Index> counts(nverts, 0);
 
-//	for(Index itri=0; itri < ntris; ++itri) {
-//		for(Index j=0; j <= 2 ; ++j) { ++counts[ m_tris[itri][j] ]; }
+//	for (Index itri=0; itri < ntris; ++itri) {
+//		for (Index j=0; j <= 2 ; ++j) { ++counts[ m_tris[itri][j] ]; }
 //	}
 
-////	std::clock_t c_start, c_end;//!***
-////	timer(0, c_start, c_end); //!***
+////	std::clock_t c_start, c_end;
+////	timer(0, c_start, c_end);
 
-//	for(int isweep=1; isweep <= nSweeps; ++isweep){
-//		for(Index itri=0; itri < ntris; ++itri) {
-//			for(Index j=0; j <= 2; ++j) {
+//	for (int isweep=1; isweep <= nSweeps; ++isweep){
+//		for (Index itri=0; itri < ntris; ++itri) {
+//			for (Index j=0; j <= 2; ++j) {
 //				Index a = m_tris[itri][j];
 //				Index b = m_tris[itri][j != 2 ? j+1 : 0];
 //				Index c = m_tris[itri][j != 0 ? j-1 : 2];
@@ -996,7 +1072,7 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //			}
 //		}
 
-//		for(Index i=0; i < nverts; ++i) {
+//		for (Index i=0; i < nverts; ++i) {
 //			m_verts[i] = newVerts[i]/counts[i] + m_verts[i];
 //			m_norms[i] = newNorms[i].normalized();
 //		}
@@ -1005,7 +1081,7 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //	}
 
 
-////	timer(1, c_start, c_end); //!***
+////	timer(1, c_start, c_end);
 
 //	m_msgLogger->logMessage("Done!",1);
 
@@ -1031,22 +1107,22 @@ void Mesh::noiseMesh(int nSweeps)
 	vector<Vector3f> newVerts(nverts, zeros);
 	vector<Vector3f> newNorms(nverts, zeros);
 
-	std::clock_t c_start, c_end;//!***
-	timer(0, c_start, c_end); //!***
+//	std::clock_t c_start, c_end;//!***
+//	timer(0, c_start, c_end);
 
 	const bool useOpenMP = true;
 
-#pragma omp parallel if(useOpenMP) default(shared)
+#pragma omp parallel if (useOpenMP) default(shared)
 {
 
-	for(int isweep=1; isweep <= nSweeps; ++isweep){
+	for (int isweep=1; isweep <= nSweeps; ++isweep){
 #pragma omp single
 {
 		m_msgLogger->logMessage(
 					"Sweep " + QString::number(isweep) + "...", isweep > 1 ? 0 : 2);
 }
 #pragma omp for schedule(static)
-		for(Index ivert=0; ivert < nverts; ++ivert) {
+		for (Index ivert=0; ivert < nverts; ++ivert) {
 			if ( m_boundVert[ivert] ) continue;
 			Vector3f v0 = m_verts[ivert];
 			Vector3f n0 = m_norms[ivert];
@@ -1068,23 +1144,19 @@ void Mesh::noiseMesh(int nSweeps)
 		}
 
 #pragma omp for schedule(static)
-		for(Index ivert=0; ivert < nverts; ++ivert) {
+		for (Index ivert=0; ivert < nverts; ++ivert) {
 			if ( m_boundVert[ivert] ) continue;
 			m_verts[ivert] = newVerts[ivert];
 			m_norms[ivert] = newNorms[ivert];
 			newVerts[ivert] = zeros;
 			newNorms[ivert] = zeros;
 		}
-//#pragma omp single
-//{
-//		m_msgLogger->logMessage("Done!", 1);
-//}
 	}
 
 } //Parallel
 
 
-	timer(1, c_start, c_end); //!***
+//	timer(1, c_start, c_end);
 
 	m_msgLogger->logMessage("Done!",1);
 
@@ -1106,33 +1178,29 @@ void Mesh::smoothMesh(int nSweeps)
 	vector<Vector3f> newVerts(nverts, zeros);
 	vector<Vector3f> newNorms(nverts, zeros);
 
-	vector<Vector3f> verts = m_verts;
-	vector<Vector3f> norms = m_norms;
+//	std::clock_t c_start, c_end;//!***
+//	timer(0, c_start, c_end);
 
+	const bool useOpenMP = true;
 
-	std::clock_t c_start, c_end;//!***
-	timer(0, c_start, c_end); //!***
-
-	const bool useOpenMP = false; //!***
-
-#pragma omp parallel if(useOpenMP) default(shared)
+#pragma omp parallel if (useOpenMP) default(shared)
 {
 
-	for(int isweep=1; isweep <= nSweeps; ++isweep){
+	for (int isweep=1; isweep <= nSweeps; ++isweep){
 #pragma omp single
 {
 		m_msgLogger->logMessage(
 					"Sweep " + QString::number(isweep) + "...", isweep > 1 ? 0 : 2);
 }
 #pragma omp for schedule(static)
-		for(Index ivert=0; ivert < nverts; ++ivert) {
+		for (Index ivert=0; ivert < nverts; ++ivert) {
 			if ( m_boundVert[ivert] ) continue;
 			Vector3f v0 = m_verts[ivert];
 			Vector3f n0 = m_norms[ivert];
 
 			Index offset = m_vertadjOffsets[ivert];
 			Index size = m_vertadjCounts[ivert];
-			for(Index i=0; i < size; ++i) {
+			for (Index i=0; i < size; ++i) {
 				Index a = m_vertadj[offset+i];
 				Vector3f v = m_verts[a];
 				Vector3f n = m_norms[a];
@@ -1150,7 +1218,7 @@ void Mesh::smoothMesh(int nSweeps)
 		}
 
 #pragma omp for schedule(static)
-		for(Index ivert=0; ivert < nverts; ++ivert) {
+		for (Index ivert=0; ivert < nverts; ++ivert) {
 			if ( m_boundVert[ivert] ) continue;
 			m_verts[ivert] = newVerts[ivert];
 			m_norms[ivert] = newNorms[ivert];
@@ -1159,33 +1227,11 @@ void Mesh::smoothMesh(int nSweeps)
 		}
 	}
 
-//#pragma omp single
-//{
-//	std::swap(m_verts, verts);
-//	for(Index ivert=0; ivert < nverts; ++ivert) {
-//		if ( m_boundVert[ivert] ) continue;
-//		Index itriEnd;
-//		Vector3f baryEnd, ptEnd;
-//		meshWalkTo(verts[ivert], ivert, itriEnd, baryEnd, &ptEnd);
-//		verts[ivert] = ptEnd;
-//	}
-//	std::swap(m_verts, verts);
-//	verts = m_verts;
-//}
 
 } //Parallel
 
-//	std::swap(m_verts, verts);
-//	for(Index ivert=0; ivert < nverts; ++ivert) {
-//		if ( m_boundVert[ivert] ) continue;
-//		Index itriEnd;
-//		Vector3f baryEnd, ptEnd;
-//		meshWalkTo(verts[ivert], ivert, itriEnd, baryEnd, &ptEnd);
-//		verts[ivert] = ptEnd;
-//	}
-//	std::swap(m_verts, verts);
 
-	timer(1, c_start, c_end); //!***
+//	timer(1, c_start, c_end);
 
 	m_msgLogger->logMessage("Done!",1);
 
@@ -1244,7 +1290,7 @@ void Mesh::edgeWalkTo(const Vector3f& pointEnd, Index ivertStart,
 		Index ivertCurr0 = ivertCurr;
 		Index offset = m_vertadjOffsets[ivertCurr0];
 		Index size = m_vertadjCounts[ivertCurr0];
-		for(Index i=0; i < size; ++i) {
+		for (Index i=0; i < size; ++i) {
 			Index ivert = m_vertadj[offset+i];
 			if (ivert == ivertPrev ) continue;
 			double distsq = distsqVertToEnd(ivert);
@@ -1283,9 +1329,10 @@ void Mesh::triWalkTo(const Vector3f& pointEnd, Index itriStart,
 			Index itri,
 			Vector3f& proj, Vector3f& bary, double& distsq, bool& hovering) ->void {
 		bool degenerate;
-		Vector3f va = m_verts[ m_tris[itri][0] ];
-		Vector3f vb = m_verts[ m_tris[itri][1] ];
-		Vector3f vc = m_verts[ m_tris[itri][2] ];
+		Vector3i *triVerts = &m_tris[itri];
+		Vector3f va = m_verts[ (*triVerts)[0] ];
+		Vector3f vb = m_verts[ (*triVerts)[1] ];
+		Vector3f vc = m_verts[ (*triVerts)[2] ];
 		proj = point_project_triangle(
 					pointEnd, va, vb, vc, hovering, degenerate, &bary);
 		 distsq = point_dist_sq(proj,pointEnd);
@@ -1313,13 +1360,13 @@ void Mesh::triWalkTo(const Vector3f& pointEnd, Index itriStart,
 		if ( newAnchor ) {
 			itriAdjA0 = m_triadj[itriAnchor][0];
 			itriAdjB0 = m_triadj[itriAnchor][1];
-			itriAdjC0 = m_triadj[itriAnchor][2];
+			itriAdjC0 = m_triadj[itriAnchor][2];			
 			iv0a = m_tris[itriAnchor][0];
 			iv0b = m_tris[itriAnchor][1];
 			iv0c = m_tris[itriAnchor][2];
 		}
 
-		for(int iside=0; iside <= 2; ++iside){
+		for (int iside=0; iside <= 2; ++iside){
 			Index itri = m_triadj[itriCurr][iside];
 			if (itri < 0 || itri == itriPrev ) continue;
 			if ( !newAnchor ) {

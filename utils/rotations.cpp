@@ -27,17 +27,17 @@ void vector_to_vector_rotation_matrix(
 	float cosa = v.dot(w);
 	float sina = vxwLen;
 
-	if( lineThruW ){
-		if( cosa < 0.0f ){
+	if ( lineThruW ){
+		if ( cosa < 0.0f ){
 			cosa = -cosa;
 			vxw = -vxw;
 		}
 	}
 
-	if( !normalized ){
+	if ( !normalized ){
 		float vvww = sqrt(v.dot(v)*w.dot(w));
 
-		if( vvww > float_tiny ){
+		if ( vvww > float_tiny ){
 			cosa = cosa/vvww;
 			sina = sina/vvww;
 		}
@@ -47,13 +47,13 @@ void vector_to_vector_rotation_matrix(
 		}
 	}
 
-	if( vxwLen > float_tiny ){
+	if ( vxwLen > float_tiny ){
 		Vector3f u = vxw/vxwLen;
 		cos_sin_angle_vector_rotation_matrix(cosa, sina, u, M);
 	}
 	else{
 		M.setIdentity();
-		if( cosa < 0.0f ) M = -M;
+		if ( cosa < 0.0f ) M = -M;
 	}
 
 }

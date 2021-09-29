@@ -211,10 +211,10 @@ void MainWindow::viewGLNorms(bool enabled)
 void MainWindow::setRandom()
 {
 	// Show the dialog as modal
-    if(randomSurfDialog->exec() == QDialog::Accepted){
+	if (randomSurfDialog->exec() == QDialog::Accepted){
 		size_t nDim;
 		bool ok = randomSurfDialog->getFields(nDim);
-		if(!ok){
+		if (!ok){
 			badInputMessageBox("All fields should be integers bigger than zero.");
 			return;
 		}
@@ -229,7 +229,7 @@ void MainWindow::setRandom()
 void MainWindow::approxNorms()
 {
 	// Show the dialog as modal
-	if(normalsDialog->exec() == QDialog::Accepted){
+	if (normalsDialog->exec() == QDialog::Accepted){
 		emit meshApproxNorms();
 	}
 
@@ -240,10 +240,10 @@ void MainWindow::approxNorms()
 void MainWindow::noise()
 {
 	// Show the dialog as modal
-	if(noiseDialog->exec() == QDialog::Accepted){
+	if (noiseDialog->exec() == QDialog::Accepted){
 		int nSweeps;
 		int ok = noiseDialog->getFields(nSweeps);
-		switch( ok ){
+		switch ( ok ){
 		case -1:
 			badInputMessageBox("Number of noising sweeps.");
 			break;
@@ -260,11 +260,11 @@ void MainWindow::noise()
 void MainWindow::smooth()
 {
 	// Show the dialog as modal
-	if(smoothDialog->exec() == QDialog::Accepted){
+	if (smoothDialog->exec() == QDialog::Accepted){
 		int nSweeps;
 
 		int ok = smoothDialog->getFields(nSweeps);
-		switch( ok ){
+		switch ( ok ){
 		case -1:
 			badInputMessageBox(
 						"Number of iterations field must be bigger than zero.");
@@ -282,10 +282,10 @@ void MainWindow::smooth()
 void MainWindow::options()
 {
     // Show the dialog as modal
-    if(optionsDialog->exec() == QDialog::Accepted){
+	if (optionsDialog->exec() == QDialog::Accepted){
 		float normScale;
 		bool ok = optionsDialog->getFields(normScale);
-        if(!ok){
+		if (!ok){
 			badInputMessageBox("All field should be greater than zero.");
             return;
         }
