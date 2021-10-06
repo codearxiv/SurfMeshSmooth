@@ -38,7 +38,7 @@
     <ClInclude Include="stdafx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DevArray.cuh">
+    <ClInclude Include="devArray.cuh">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

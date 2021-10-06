@@ -33,7 +33,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DevArray.cuh" />
+    <ClInclude Include="devArray.cuh" />
     <ClInclude Include="handle_error.cuh" />
     <ClInclude Include="mesh_smooth.cuh" />
     <ClInclude Include="stdafx.h" />

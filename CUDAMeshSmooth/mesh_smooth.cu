@@ -298,13 +298,13 @@ extern "C"  void cuda_mesh_smooth(
 
 
 	if (localizedVerts) {
-		// Vertices	ordered into patches on the surface
+		// Vertices ordered into patches on the surface
 		for (int i = 0; i < nSweeps; ++i) {
 			cuda_mesh_smooth_sharedmem<<<nblocks, nthreadsPerBlock, nshared>>>(
 				nverts, nidxs, d_vertidxs.getData(), d_vertadj.getData(),
 				d_vertadjOffsets.getData(),
-				d_vertsx.getData(), d_vertsy.getData(), d_vertsz.getData(),
-				d_normsx.getData(), d_normsy.getData(), d_normsz.getData(),
+				pd_vertsx->getData(), pd_vertsy->getData(), pd_vertsz->getData(),
+				pd_normsx->getData(), pd_normsy->getData(), pd_normsz->getData(),
 				pd_newVertsx->getData(), pd_newVertsy->getData(), pd_newVertsz->getData(),
 				pd_newNormsx->getData(), pd_newNormsy->getData(), pd_newNormsz->getData());
 			//Swap buffer pointers, new coordinates becoming current
