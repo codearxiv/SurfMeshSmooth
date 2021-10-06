@@ -22,8 +22,10 @@ MeshWorker::~MeshWorker()
 void MeshWorker::generateMesh(
 		QVector3D norm, size_t ndim,
 		const std::function<float(float xu, float xv)> heightFun)
-{
+{	
+
 	m_mesh->fromPlaneHeight(norm[0], norm[1], norm[2], ndim, heightFun);
+
 	emit finished();
 }
 //-------------------------------------------------------------------------

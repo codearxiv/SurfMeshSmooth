@@ -13,7 +13,8 @@
 #include "timer.h"
 #include "selection_sort.h"
 #include "vect_utils.h"
-//#include "test.hpp"
+//#include "mesh_smooth.cuh"
+
 
 #include <Eigen/Core>
 #include <qopengl.h>
@@ -60,12 +61,20 @@ Mesh::Mesh(MessageLogger* msgLogger, QObject *parent)
 	m_verts.reserve(2500);
 	m_norms.reserve(2500);
 	m_vertGL.reserve(2500 * 6);
+
+	m_mesh_smooth_GPU = nullptr;
+	m_localizedVerts = false;
+	m_staleGPUGeomData = true;
+	m_staleGPUTopoData = true;
 }
 
 //---------------------------------------------------------
 
 Mesh::~Mesh()
 {
+	// Don't call any function locked on m_reMutex here,
+	// else meshWorker thread may wait on the lock owned
+	// by another running process before being killed.
 
 }
 
@@ -74,17 +83,33 @@ Mesh::~Mesh()
 
 void Mesh::clear()
 {
+
 	QMutexLocker locker(&m_recMutex);
 
 	m_verts.clear();
+	m_norms.clear();
 	m_tris.clear();
 //	m_tets.clear();
-	m_norms.clear();
-	m_triadj.clear();
 	m_boundVert.clear();
+	m_triadj.clear();
 	m_vertadj.clear();
 	m_vertadjOffsets.clear();
-	m_vertadjCounts.clear();
+	m_vertTri.clear();
+
+	m_vertsx_GPU.clear();
+	m_vertsy_GPU.clear();
+	m_vertsz_GPU.clear();
+	m_normsx_GPU.clear();
+	m_normsy_GPU.clear();
+	m_normsz_GPU.clear();
+	m_vertidxs_GPU.clear();
+	m_vertadj_GPU.clear();
+	m_vertadjOffsets_GPU.clear();
+	m_localizedVerts = false;
+	m_staleGPUGeomData = true;
+	m_staleGPUTopoData = true;
+
+	m_debug.clear();
 	m_vertGL.clear();
 	m_triGL.clear();
 	m_normGL.clear();
@@ -221,7 +246,7 @@ void Mesh::fromPlaneHeight(
 		float normx, float normy, float normz, size_t ndim,
 		const std::function<float(float xu, float xv)> heightFun)
 {
-	assert(ndim > 1);
+	if (ndim <= 1) return;
 
 	QMutexLocker locker(&m_recMutex);
 
@@ -269,16 +294,21 @@ void Mesh::fromPlaneHeight(
 		}
 	}
 
+	m_localizedVerts = false;
+	m_staleGPUGeomData = true;
+	m_staleGPUTopoData = true;
+
 	if (m_msgLogger != nullptr) {
 		m_msgLogger->logMessage(QString::number(triCount()) + " triangles created.");
 	}
 
+
+	buildVertAdjacency();
+	// Reorder vertices into patches to speed up CUDA smoothing.
+	localizeVertIndices(128);
 	buildTriAdjacency();
-//	buildVertAdjacency();
 	buildVertToTriMap();
 	approxMeshNorms();
-
-//	localizeVertIndices(128);
 
 //	int number;
 //	testfunction(number);
@@ -343,7 +373,7 @@ void Mesh::approxMeshNorms()
 		// instead of per-triangle and average.
 #pragma omp parallel if (useOpenMP) default(shared)
 {
-		auto triVertSide = [](Vector3i *triVerts, Index ivert) -> int {
+		auto tri_vert_side = [](Vector3i *triVerts, Index ivert) -> int {
 			int iside;
 			for(iside=0; iside<=2; ++iside) {
 				if ((*triVerts)[iside] == ivert) break;
@@ -354,7 +384,7 @@ void Mesh::approxMeshNorms()
 #pragma omp for schedule(static)
 		for (Index ivert=0; ivert < nverts; ++ivert) {
 			Index itri0 = m_vertTri[ivert];
-			int iside0 = triVertSide(&m_tris[itri0], ivert);
+			int iside0 = tri_vert_side(&m_tris[itri0], ivert);
 			Index itrib0 = m_triadj[itri0][iside0!=2 ? iside0+1 : 0];
 			Index itric0 = m_triadj[itri0][iside0!=0 ? iside0-1 : 2];
 			Vector3f normAvg(0.0f,0.0f,0.0f);
@@ -367,7 +397,7 @@ void Mesh::approxMeshNorms()
 
 				while (itri >= 0) {
 					Vector3i *triVerts = &m_tris[itri];
-					int iside = triVertSide(triVerts, ivert);
+					int iside = tri_vert_side(triVerts, ivert);
 					int isideb = (iside != 2 ? iside+1 : 0);
 					int isidec = (iside != 0 ? iside-1 : 2);
 					Index b = (*triVerts)[isideb];
@@ -756,8 +786,7 @@ void Mesh::buildVertAdjacency()
 	vector<Index> sorted(sizeMax);
 	m_vertadj.reserve(sizeAccum/2);
 	m_vertadj.clear();
-	m_vertadjOffsets.assign(nverts,0);
-	m_vertadjCounts.assign(nverts,0);
+	m_vertadjOffsets.assign(nverts+1,0);
 	m_boundVert.assign(nverts, false);
 	m_vertadjMax = 0;
 
@@ -794,8 +823,8 @@ void Mesh::buildVertAdjacency()
 			}
 			aprev = a;
 		}
-		m_vertadjCounts[ivert] = m_vertadj.size() - m_vertadjOffsets[ivert];
-		m_vertadjMax = max(m_vertadjMax, m_vertadjCounts[ivert]);
+		Index count = m_vertadj.size() - m_vertadjOffsets[ivert];
+		m_vertadjMax = max(m_vertadjMax, count);
 
 		if ( boundVert ) {
 			m_boundVert[ivert] = true;
@@ -807,6 +836,9 @@ void Mesh::buildVertAdjacency()
 
 	}
 
+	m_vertadjOffsets[nverts] = m_vertadj.size();
+
+	m_staleGPUTopoData = true;
 
 //	timer(1, c_start, c_end); //!***
 
@@ -838,8 +870,10 @@ void Mesh::buildVertToTriMap()
 // s.t. they are localized into 'patches' on the mesh - i.e.
 // vertices that are topological near tend to have indices
 // that are near as well.
-// This is to improve cache spatial locality of topologically
-// near vertices to allow CUDA blocking into shared memory.
+// This is to improve cache spatial locality of vertices
+// that are topologically near, allowing CUDA blocking into
+// shared memory to squeeze out some extra performance
+// during smoothing (about 50%-70%).
 
 
 void Mesh::localizeVertIndices(size_t maxPatchSize)
@@ -847,6 +881,8 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 	QMutexLocker locker(&m_recMutex);
 
 	if ( m_vertadj.size() == 0 ) buildVertAdjacency();
+
+	m_msgLogger->logMessage("Localizing vertex indices...");
 
 	Index nverts = m_verts.size();
 	Index ntris = m_tris.size();
@@ -873,10 +909,10 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 			if ( patchIdx >= patch.size() ) break;
 			Index ivert = patch[patchIdx];
 			Index offset = m_vertadjOffsets[ivert];
-			Index size = m_vertadjCounts[ivert];
-			for (Index i=0; i < size; ++i) {
+			Index offsetNxt = m_vertadjOffsets[ivert+1];
+			for (Index i=offset; i < offsetNxt; ++i) {
 				if ( npatch > maxPatchSize ) break;
-				Index ivertadj = m_vertadj[offset+i];
+				Index ivertadj = m_vertadj[i];
 				if ( map[ivertadj] >= 0 ) continue;
 				map[ivertadj] = nvertsMapped;
 				++nvertsMapped;
@@ -947,22 +983,25 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 	// Remap vertex adjacency
 	vector<Index> m_vertadjOld = m_vertadj;
 	vector<Index> m_vertadjOffsetsOld = m_vertadjOffsets;
-	vector<Index> m_vertadjCountsOld = m_vertadjCounts;
 	Index offset = 0;
 	for (Index ivert=0; ivert < nverts; ++ivert) {
-		Index offsetOld = m_vertadjOffsetsOld[mapinv[ivert]];
-		Index size = m_vertadjCountsOld[mapinv[ivert]];
+		m_vertadjOffsets[ivert] = offset;
+		Index ivertmap = mapinv[ivert];
+		Index offsetOld = m_vertadjOffsetsOld[ivertmap];
+		Index offsetOldNxt = m_vertadjOffsetsOld[ivertmap+1];
+		Index size = offsetOldNxt - offsetOld;
 		for (Index i=0; i < size; ++i) {
 			Index ivertadj = m_vertadjOld[offsetOld+i];
 			m_vertadj[offset+i] = map[ivertadj];
 		}
-		m_vertadjOffsets[ivert] = offset;
-		m_vertadjCounts[ivert] = size;
 		offset += size;
 	}
 
+	m_localizedVerts = true;
+	m_staleGPUGeomData = true;
+	m_staleGPUTopoData = true;
 
-
+	m_msgLogger->logMessage("Done!",1);
 
 }
 ////---------------------------------------------------------
@@ -971,13 +1010,13 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //{
 //	QMutexLocker locker(&m_recMutex);
 
-//	m_msgLogger->logMessage("Adding random noise...");
-
 ////	Index nverts = m_verts.size();
 //	Index ntris = m_tris.size();
 
 //	if ( m_norms.size() == 0 ) approxMeshNorms();
 //	if ( m_boundVert.size() == 0 ) buildTriangleAdjacency();
+
+//	m_msgLogger->logMessage("Adding random noise...");
 
 //	vector<Index> tris(ntris);
 //	for (Index i=0; i < ntris; ++i){ tris[i] = i; }
@@ -1013,7 +1052,9 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //			}
 //		}
 //	}
-
+//
+//  staleGPUTopoData = true;
+//
 //	m_msgLogger->logMessage("Done!",1);
 
 //}
@@ -1026,8 +1067,6 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //{
 //	QMutexLocker locker(&m_recMutex);
 
-//	m_msgLogger->logMessage("Smoothing...");
-
 //	Index nverts = m_verts.size();
 //	Index ntris = m_tris.size();
 //	const Vector3f baryCent = Vector3f(1.0f,1.0f,1.0f)/3.0f;
@@ -1035,6 +1074,8 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 
 //	if ( m_norms.size() == 0 ) approxMeshNorms();
 //	if ( m_boundVert.size() == 0 ) buildTriangleAdjacency2();
+
+//	m_msgLogger->logMessage("Smoothing...");
 
 //	vector<Vector3f> newVerts(nverts, zeros);
 //	vector<Vector3f> newNorms(nverts, zeros);
@@ -1080,6 +1121,8 @@ void Mesh::localizeVertIndices(size_t maxPatchSize)
 //		newNorms.assign(nverts, zeros);
 //	}
 
+//  staleGPUGeomData = true;
+
 
 ////	timer(1, c_start, c_end);
 
@@ -1096,13 +1139,13 @@ void Mesh::noiseMesh(int nSweeps)
 {
 	QMutexLocker locker(&m_recMutex);
 
-	m_msgLogger->logMessage("Adding random noise...");
-
 	Index nverts = m_verts.size();
 	const Vector3f zeros = Vector3f(0.0f,0.0f,0.0f);
 
 	if ( m_norms.size() == 0 ) approxMeshNorms();
 	if ( m_vertadj.size() == 0 ) buildVertAdjacency();
+
+	m_msgLogger->logMessage("Adding random noise...");
 
 	vector<Vector3f> newVerts(nverts, zeros);
 	vector<Vector3f> newNorms(nverts, zeros);
@@ -1128,7 +1171,8 @@ void Mesh::noiseMesh(int nSweeps)
 			Vector3f n0 = m_norms[ivert];
 
 			Index offset = m_vertadjOffsets[ivert];
-			Index size = m_vertadjCounts[ivert];
+			Index offsetNxt = m_vertadjOffsets[ivert+1];
+			Index size = offsetNxt - offset;
 			Index i = rand() % size;
 			float t = float(rand())/float(RAND_MAX);
 			Index a = m_vertadj[offset+i];
@@ -1155,19 +1199,39 @@ void Mesh::noiseMesh(int nSweeps)
 
 } //Parallel
 
+	m_staleGPUGeomData = true;
 
 //	timer(1, c_start, c_end);
 
 	m_msgLogger->logMessage("Done!",1);
 
 }
+
+
 //---------------------------------------------------------
 
 void Mesh::smoothMesh(int nSweeps)
 {
 	QMutexLocker locker(&m_recMutex);
 
-	m_msgLogger->logMessage("Smoothing...");
+	if ( m_mesh_smooth_GPU == nullptr ) {
+		smoothMesh_CPU(nSweeps);
+	}
+	else {
+		smoothMesh_GPU(nSweeps);
+		if ( m_mesh_smooth_GPU == nullptr ) {
+			// GPU smoothing failed
+			smoothMesh_CPU(nSweeps);
+		}
+	}
+
+}
+
+//---------------------------------------------------------
+
+void Mesh::smoothMesh_CPU(int nSweeps)
+{
+	QMutexLocker locker(&m_recMutex);
 
 	Index nverts = m_verts.size();
 	const Vector3f zeros = Vector3f(0.0f,0.0f,0.0f);
@@ -1175,8 +1239,15 @@ void Mesh::smoothMesh(int nSweeps)
 	if ( m_norms.size() == 0 ) approxMeshNorms();
 	if ( m_vertadj.size() == 0 ) buildVertAdjacency();
 
-	vector<Vector3f> newVerts(nverts, zeros);
-	vector<Vector3f> newNorms(nverts, zeros);
+	m_msgLogger->logMessage("Smoothing (CPU)...");
+
+	vector<Vector3f> newVerts = m_verts;
+	vector<Vector3f> newNorms = m_norms;
+
+	vector<Vector3f> *p_verts = &m_verts;
+	vector<Vector3f> *p_norms = &m_norms;
+	vector<Vector3f> *p_newVerts = &newVerts;
+	vector<Vector3f> *p_newNorms = &newNorms;
 
 //	std::clock_t c_start, c_end;//!***
 //	timer(0, c_start, c_end);
@@ -1186,7 +1257,7 @@ void Mesh::smoothMesh(int nSweeps)
 #pragma omp parallel if (useOpenMP) default(shared)
 {
 
-	for (int isweep=1; isweep <= nSweeps; ++isweep){
+	for (int isweep=1; isweep <= nSweeps; ++isweep){		
 #pragma omp single
 {
 		m_msgLogger->logMessage(
@@ -1195,46 +1266,158 @@ void Mesh::smoothMesh(int nSweeps)
 #pragma omp for schedule(static)
 		for (Index ivert=0; ivert < nverts; ++ivert) {
 			if ( m_boundVert[ivert] ) continue;
-			Vector3f v0 = m_verts[ivert];
-			Vector3f n0 = m_norms[ivert];
+			Vector3f v0 = (*p_verts)[ivert];
+			Vector3f n0 = (*p_norms)[ivert];
+			Vector3f v1 = zeros;
+			Vector3f n1 = zeros;
 
 			Index offset = m_vertadjOffsets[ivert];
-			Index size = m_vertadjCounts[ivert];
-			for (Index i=0; i < size; ++i) {
-				Index a = m_vertadj[offset+i];
-				Vector3f v = m_verts[a];
-				Vector3f n = m_norms[a];
-				Vector3f w = v - v0;
-				Vector3f p0 = w.dot(n0)*n0;
-				Vector3f p = w.dot(n)*n;
-				Vector3f w1 = 0.25f*(p - p0) + 0.5f*w;
-				Vector3f n1 = 0.5f*(n + n0);
-				n1.normalize();
-				newVerts[ivert] += w1;
-				newNorms[ivert] += n1;
+			Index offsetNxt = m_vertadjOffsets[ivert+1];
+			Index size = offsetNxt - offset;
+			for (Index i=offset; i < offsetNxt; ++i) {
+				Index a = m_vertadj[i];
+				Vector3f v = (*p_verts)[a];
+				Vector3f n = (*p_norms)[a];
+				v = v - v0;
+				float vn0 = v.dot(n0);
+				float vn = v.dot(n);
+				v1 += 0.25f*(vn*n - vn0*n0) + 0.5f*v;
+				n = 0.5f*(n + n0);
+				n1 += n.normalized();
 			}
-			newVerts[ivert] = newVerts[ivert]/size + v0;
-			newNorms[ivert].normalize();
+			(*p_newVerts)[ivert] = v1/size + v0;
+			(*p_newNorms)[ivert] = n1.normalized();
 		}
 
+#pragma omp single
+{
+			std::swap(p_verts, p_newVerts);
+			std::swap(p_norms, p_newNorms);
+}
+
+	} // sweeps
+
+
+	if ( nSweeps%2 != 0 ) {
 #pragma omp for schedule(static)
 		for (Index ivert=0; ivert < nverts; ++ivert) {
-			if ( m_boundVert[ivert] ) continue;
 			m_verts[ivert] = newVerts[ivert];
 			m_norms[ivert] = newNorms[ivert];
-			newVerts[ivert] = zeros;
-			newNorms[ivert] = zeros;
 		}
 	}
 
-
 } //Parallel
 
+	m_staleGPUGeomData = true;
 
 //	timer(1, c_start, c_end);
 
 	m_msgLogger->logMessage("Done!",1);
 
+}
+
+//---------------------------------------------------------
+
+void Mesh::smoothMesh_GPU(int nSweeps)
+{
+	QMutexLocker locker(&m_recMutex);
+
+	size_t nverts = m_verts.size();
+	const Vector3f zeros = Vector3f(0.0f,0.0f,0.0f);
+
+	if ( m_norms.size() == 0 ) approxMeshNorms();
+	if ( m_vertadj.size() == 0 ) buildVertAdjacency();
+
+	m_msgLogger->logMessage("Smoothing (GPU)...");
+
+//	std::clock_t c_start, c_end;//!***
+//	timer(0, c_start, c_end);
+
+	if ( m_staleGPUGeomData ) {
+		m_vertsx_GPU.resize(nverts);
+		m_vertsy_GPU.resize(nverts);
+		m_vertsz_GPU.resize(nverts);
+		m_normsx_GPU.resize(nverts);
+		m_normsy_GPU.resize(nverts);
+		m_normsz_GPU.resize(nverts);
+
+		for (size_t ivert = 0; ivert < nverts; ++ivert) {
+			m_vertsx_GPU[ivert] = m_verts[ivert][0];
+			m_vertsy_GPU[ivert] = m_verts[ivert][1];
+			m_vertsz_GPU[ivert] = m_verts[ivert][2];
+		}
+		for (size_t ivert = 0; ivert < nverts; ++ivert) {
+			m_normsx_GPU[ivert] = m_norms[ivert][0];
+			m_normsy_GPU[ivert] = m_norms[ivert][1];
+			m_normsz_GPU[ivert] = m_norms[ivert][2];
+		}
+		m_staleGPUGeomData = false;
+	}
+
+	if ( m_staleGPUTopoData ) {
+		size_t nadj = m_vertadj.size();
+
+		m_vertidxs_GPU.resize(nverts);
+		m_vertadj_GPU.resize(nadj);
+		m_vertadjOffsets_GPU.resize(nverts+1);
+
+		size_t offset = 0;
+		size_t ninterior = 0;
+		for(size_t ivert=0; ivert < nverts; ++ivert) {
+			if ( m_boundVert[ivert] ) continue;
+			m_vertidxs_GPU[ninterior] = ivert;
+			m_vertadjOffsets_GPU[ninterior] = offset;
+			size_t offsetOrig = m_vertadjOffsets[ivert];
+			size_t offsetOrigNxt = m_vertadjOffsets[ivert+1];
+			size_t size = offsetOrigNxt - offsetOrig;
+			for (size_t i=0; i < size; ++i) {
+				m_vertadj_GPU[offset+i] = m_vertadj[offsetOrig+i];
+			}
+			offset += size;
+			++ninterior;
+		}
+		m_vertadjOffsets_GPU[ninterior] = offset;
+
+		m_vertidxs_GPU.resize(ninterior);
+		m_vertadj_GPU.resize(offset);
+		m_vertadjOffsets_GPU.resize(ninterior+1);
+
+		m_staleGPUTopoData = false;
+	}
+
+	size_t nidxs = m_vertidxs_GPU.size();
+	size_t nadjidxs = m_vertadj_GPU.size();
+
+	bool success;
+	m_mesh_smooth_GPU(
+				nSweeps, nverts, nidxs, nadjidxs, 128,
+				m_localizedVerts,
+				m_vertidxs_GPU.data(), m_vertadj_GPU.data(),
+				m_vertadjOffsets_GPU.data(),
+				m_vertsx_GPU.data(), m_vertsy_GPU.data(),
+				m_vertsz_GPU.data(),
+				m_normsx_GPU.data(), m_normsy_GPU.data(),
+				m_normsz_GPU.data(), success);
+
+	if ( success ) {
+		for (size_t ivert = 0; ivert < nverts; ++ivert) {
+			m_verts[ivert][0] = m_vertsx_GPU[ivert];
+			m_verts[ivert][1] = m_vertsy_GPU[ivert];
+			m_verts[ivert][2] = m_vertsz_GPU[ivert];
+		}
+
+		for (size_t ivert = 0; ivert < nverts; ++ivert) {
+			m_norms[ivert][0] = m_normsx_GPU[ivert];
+			m_norms[ivert][1] = m_normsy_GPU[ivert];
+			m_norms[ivert][2] = m_normsz_GPU[ivert];
+		}
+		//	timer(1, c_start, c_end);
+
+		m_msgLogger->logMessage("Done!",1);
+	}
+	else {
+		m_msgLogger->logMessage("Failed.",1);
+	}
 }
 
 //---------------------------------------------------------
@@ -1277,23 +1460,23 @@ void Mesh::edgeWalkTo(const Vector3f& pointEnd, Index ivertStart,
 {
 	if ( m_vertadj.size() == 0 ) buildVertAdjacency();
 
-	auto distsqVertToEnd = [&](Index ivert) ->double {
+	auto distsq_vert_to_end = [&](Index ivert) ->double {
 		Vector3f w = pointEnd - m_verts[ivert];
 		return w(0)*w(0) + w(1)*w(1) + w(2)*w(2);
 	};
 
 	Index ivertCurr = ivertStart;
-	double distsqCurr = distsqVertToEnd(ivertCurr);
+	double distsqCurr = distsq_vert_to_end(ivertCurr);
 	Index ivertPrev = -1;
 
 	while (true){
 		Index ivertCurr0 = ivertCurr;
 		Index offset = m_vertadjOffsets[ivertCurr0];
-		Index size = m_vertadjCounts[ivertCurr0];
-		for (Index i=0; i < size; ++i) {
-			Index ivert = m_vertadj[offset+i];
+		Index offsetNxt = m_vertadjOffsets[ivertCurr0+1];
+		for (Index i=offset; i < offsetNxt; ++i) {
+			Index ivert = m_vertadj[i];
 			if (ivert == ivertPrev ) continue;
-			double distsq = distsqVertToEnd(ivert);
+			double distsq = distsq_vert_to_end(ivert);
 			if ( distsq < distsqCurr ) {
 				ivertCurr = ivert;
 				distsqCurr = distsq;
@@ -1325,7 +1508,7 @@ void Mesh::triWalkTo(const Vector3f& pointEnd, Index itriStart,
 {
 	if ( m_triadj.size() == 0 ) buildTriAdjacency();
 
-	auto projEndToTri = [&](
+	auto proj_end_to_tri = [&](
 			Index itri,
 			Vector3f& proj, Vector3f& bary, double& distsq, bool& hovering) ->void {
 		bool degenerate;
@@ -1343,7 +1526,7 @@ void Mesh::triWalkTo(const Vector3f& pointEnd, Index itriStart,
 	Vector3f projBest, baryBest;
 	double distsqBest;
 	bool hovering;
-	projEndToTri(itriBest, projBest, baryBest, distsqBest, hovering);
+	proj_end_to_tri(itriBest, projBest, baryBest, distsqBest, hovering);
 	Index itriCurr = itriBest;
 	Index itriPrev = -1;
 	Index itriAnchor = itriBest;
@@ -1376,7 +1559,7 @@ void Mesh::triWalkTo(const Vector3f& pointEnd, Index itriStart,
 
 			double distsq;
 			Vector3f proj, bary;
-			projEndToTri(itri, proj, bary, distsq, hovering);
+			proj_end_to_tri(itri, proj, bary, distsq, hovering);
 			if ( distsq < distsqNext ) {
 				itriNext = itri;
 				projNext = proj;

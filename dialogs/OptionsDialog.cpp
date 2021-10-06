@@ -23,7 +23,7 @@ OptionsDialog::OptionsDialog(QWidget *parent) : QDialog(parent)
 
 	normScaleLineEdit = new QLineEdit(this);
 	normScaleLineEdit->setValidator(validator);
-	normScaleLineEdit->setText("0.01");
+	normScaleLineEdit->setText("0.025");
 	form->addRow(QString("Display normals size:"), normScaleLineEdit);
 
     buttonBox = new QDialogButtonBox(

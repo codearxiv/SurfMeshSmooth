@@ -29,15 +29,24 @@ class Mesh : public QObject
 	using Vector3i = Eigen::Vector3i;
 	using Matrix3f = Eigen::Matrix3f;
 
+	typedef void (*GPUSmoothPrototype) (
+			int, size_t, size_t, size_t,
+			unsigned int, bool, const size_t*,
+			const size_t*, const size_t*,
+			float*, float*, float*,
+			float*, float*, float*, bool&);
+
 public:
-	Mesh(MessageLogger *msgLogger = nullptr, QObject *parent = nullptr);
+	Mesh(MessageLogger *msgLogger = nullptr,
+		 QObject *parent = nullptr);
 	~Mesh();
 	void clear();
+	void setGPUSmoothing(GPUSmoothPrototype func) { m_mesh_smooth_GPU = func; }
 	const Vector3f vert(Index idx) const { return m_verts[idx]; }
-	const GLfloat* vertGLData();
-	const GLuint* triGLData();
-	const GLfloat* normGLData(float scale);
-	const GLfloat* debugGLData();
+	const GLfloat *vertGLData();
+	const GLuint *triGLData();
+	const GLfloat *normGLData(float scale);
+	const GLfloat *debugGLData();
 
 	Index vertCount() const { return m_verts.size(); }
 	Index triCount() const { return m_tris.size(); }
@@ -56,10 +65,11 @@ public:
 	void buildVertAdjacency();
 	void buildVertToTriMap();
 	void localizeVertIndices(size_t patchSize);
-	void localizeTriIndices(size_t patchSize);
 
 	void noiseMesh(int nSweeps);
 	void smoothMesh(int nSweeps);
+	void smoothMesh_CPU(int nSweeps);
+	void smoothMesh_GPU(int nSweeps);
 	void meshWalkTo(const Vector3f& pointEnd, Index ivertStart,
 					Index& itriEnd, Vector3f& baryEnd,
 					Vector3f *triPointEnd = nullptr);
@@ -77,9 +87,19 @@ private:
 	vector<Vector3i> m_triadj;
 	vector<Index> m_vertadj;
 	vector<Index> m_vertadjOffsets;
-	vector<Index> m_vertadjCounts;
 	vector<Index> m_vertTri;
 	Index m_vertadjMax;
+
+	GPUSmoothPrototype m_mesh_smooth_GPU;
+	vector<float> m_vertsx_GPU, m_vertsy_GPU, m_vertsz_GPU;
+	vector<float> m_normsx_GPU, m_normsy_GPU, m_normsz_GPU;
+	vector<size_t> m_vertidxs_GPU;
+	vector<size_t> m_vertadj_GPU;
+	vector<size_t> m_vertadjOffsets_GPU;
+	bool m_localizedVerts;
+	bool m_staleGPUGeomData;
+	bool m_staleGPUTopoData;
+
 	vector<std::pair<Vector3f,Vector3f>> m_debug;
 	vector<GLfloat> m_vertGL;
 	vector<GLuint> m_triGL;

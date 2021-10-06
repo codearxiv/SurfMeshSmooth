@@ -1,3 +1,7 @@
+//-----------------------------------------------------------
+//  Copyright (C) 2021 Piotr (Peter) Beben <pdbcas2@gmail.com>
+//  See LICENSE included with this distribution.
+
 #include "MessageLogger.h"
 
 #include <QPlainTextEdit>

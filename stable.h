@@ -66,4 +66,6 @@
 #include <QRecursiveMutex>
 #include <QMutexLocker>
 #include <QThread>
+//#include <QLibrary>
+#include <windows.h>
 #endif

@@ -18,6 +18,9 @@
 #include <QRecursiveMutex>
 #include <math.h>
 
+//#include <QLibrary>
+#include <windows.h>
+
 #define SHOW_MESH
 #define SHOW_MESH_DBUG
 
@@ -55,6 +58,38 @@ GLWidget::GLWidget(QWidget *parent, MessageLogger* msgLogger)
 		setFormat(fmt);
 	}
 
+
+	typedef void (*GPUSmoothPrototype)(int, size_t, size_t, size_t,
+									   unsigned int, bool, const size_t*,
+									   const size_t*, const size_t*,
+									   float*, float*, float*,
+									   float*, float*, float*, bool&);
+//	if (QLibrary::isLibrary("CUDAMeshSmooth.dll")) {
+//		QLibrary lib("CUDAMeshSmooth.dll");
+//		lib.load();
+//		if (lib.isLoaded()) {
+//			auto mesh_smooth_GPU = (GPUSmoothPrototype)lib.resolve("cuda_mesh_smooth");
+//			m_mesh.setGPUSmoothing(mesh_smooth_GPU);
+//		}
+//		else { qDebug() << "Error " << lib.errorString() << "\n"; }
+//	}
+//	else { qDebug() << "Not a library\n"; }
+
+	HINSTANCE hDLL = LoadLibrary(L"CUDAMeshSmooth.dll");
+	if ( hDLL != nullptr ) {
+		auto mesh_smooth_GPU =
+				(GPUSmoothPrototype)GetProcAddress(hDLL, "cuda_mesh_smooth");
+		if ( mesh_smooth_GPU != nullptr ) {
+			bool success;
+			mesh_smooth_GPU(
+						0,0,0,0,0,
+						true, nullptr, nullptr, nullptr,
+						nullptr, nullptr, nullptr,
+						nullptr, nullptr, nullptr, success);
+			if ( success ) m_mesh.setGPUSmoothing(mesh_smooth_GPU);
+		}
+	}
+
 	m_meshThread = new QThread(this);
 	m_meshWorker = new MeshWorker(m_mesh);
 	m_meshWorker->moveToThread(m_meshThread);
@@ -76,6 +111,9 @@ GLWidget::GLWidget(QWidget *parent, MessageLogger* msgLogger)
 
 	connect(m_meshThread, &QThread::finished,
 			m_meshWorker, &QObject::deleteLater);
+
+//	connect(qApp, &QCoreApplication::aboutToQuit,
+//			m_meshThread, &QThread::quit);
 
 	m_meshThread->start();
 
@@ -626,7 +664,7 @@ void GLWidget::getMesh(MeshPtr& mesh)
 void GLWidget::viewGLMeshNorms(bool enabled)
 {
 	m_showMeshNorms = enabled;
-	setGLMeshNorms(1e-2*m_modelSize);
+	setGLMeshNorms(2.5e-2*m_modelSize);
 	update();
 }
 
