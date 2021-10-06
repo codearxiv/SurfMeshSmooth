@@ -1,5 +1,5 @@
 # SurfMeshSmooth
-Surface triangle mesh smoothing, an extension of basic laplacian smoothing that takes vertex normals into account in order to preserve surface curvature during smoothing.
+Surface triangle mesh smoothing, using an extension of basic laplacian smoothing that takes vertex normals into account in order to preserve surface curvature during smoothing.
 
 Might not properly handle sharp concave corners on 1D mesh boundary, if any.
 
